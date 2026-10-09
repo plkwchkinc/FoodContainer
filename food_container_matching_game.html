@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food & Drink Quantity Matching Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+            min-height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .font-fredoka {
+            font-family: 'Fredoka', cursive, sans-serif;
+        }
+        .draggable-card {
+            touch-action: none;
+            cursor: grab;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease;
+        }
+        .draggable-card:active {
+            cursor: grabbing;
+        }
+        .draggable-card.selected {
+            ring: 4px;
+            transform: scale(1.03);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5);
+        }
+        .drop-target {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .drop-target.drag-over {
+            transform: scale(1.02);
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+        .animate-shake {
+            animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+        }
+        @keyframes pop {
+            0% { transform: scale(0.95); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: pop 0.3s ease-out;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen text-slate-800 antialiased pb-6">
+
+    <!-- Top Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-emerald-100 sticky top-0 z-30 px-4 py-3 shadow-sm">
+        <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-emerald-200">
+                    🥤
+                </div>
+                <div>
+                    <h1 class="font-fredoka text-xl md:text-2xl font-bold text-emerald-800 leading-tight">Container Match</h1>
+                    <p class="text-xs text-slate-500 font-semibold hidden sm:block">Match the correct quantity phrase with its food item!</p>
+                </div>
+            </div>
+
+            <!-- Stats & Controls -->
+            <div class="flex items-center gap-3 sm:gap-4 ml-auto">
+                <!-- Mode Toggle -->
+                <div class="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-bold text-slate-600">
+                    <button id="modePracticeBtn" class="px-3 py-1.5 rounded-lg transition-all bg-white text-emerald-700 shadow-sm">Practice</button>
+                    <button id="modeTimeBtn" class="px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800">Time Attack</button>
+                </div>
+
+                <!-- Timer Display -->
+                <div id="timerContainer" class="hidden flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl font-bold text-amber-700 text-sm">
+                    <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span id="timerText">01:00</span>
+                </div>
+
+                <!-- Mute Toggle -->
+                <button id="soundBtn" class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition" title="Toggle Sound">
+                    <svg id="soundOnIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                    <svg id="soundOffIcon" class="w-5 h-5 hidden text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Game Container -->
+    <main class="max-w-6xl mx-auto w-full px-4 pt-4 flex-1 flex flex-col gap-4">
+        
+        <!-- Scoreboard & Progress Bar -->
+        <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <!-- Stats Counters -->
+            <div class="flex items-center justify-around w-full sm:w-auto gap-6 sm:gap-8">
+                <div class="text-center sm:text-left">
+                    <div class="text-xs uppercase font-bold text-slate-400 tracking-wider">Score</div>
+                    <div id="scoreText" class="font-fredoka text-2xl font-bold text-emerald-600">0</div>
+                </div>
+                <div class="text-center sm:text-left">
+                    <div class="text-xs uppercase font-bold text-slate-400 tracking-wider">Attempts</div>
+                    <div id="attemptsText" class="font-fredoka text-2xl font-bold text-slate-700">0</div>
+                </div>
+                <div class="text-center sm:text-left">
+                    <div class="text-xs uppercase font-bold text-slate-400 tracking-wider">Matches</div>
+                    <div id="matchesText" class="font-fredoka text-2xl font-bold text-blue-600">0 / 8</div>
+                </div>
+            </div>
+
+            <!-- Progress & Actions -->
+            <div class="flex items-center gap-3 w-full sm:w-auto">
+                <div class="flex-1 sm:w-48 bg-slate-100 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200">
+                    <div id="progressBar" class="bg-emerald-500 h-full rounded-full transition-all duration-300 w-0"></div>
+                </div>
+
+                <button id="hintBtn" class="px-3.5 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-xl font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm">
+                    💡 <span>Hint (-10)</span>
+                </button>
+
+                <button id="restartBtn" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition active:scale-95">
+                    🔄 <span>Reset</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Instructional Banner / Mobile Help Banner -->
+        <div id="instructionBanner" class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs sm:text-sm text-blue-800 flex items-center justify-between">
+            <span class="flex items-center gap-2">
+                <span class="text-lg">💡</span> 
+                <span>Drag phrases onto items, or <strong>tap a phrase then tap an item</strong> to match!</span>
+            </span>
+            <button onclick="document.getElementById('instructionBanner').remove()" class="text-blue-500 hover:text-blue-700 text-lg font-bold px-2">&times;</button>
+        </div>
+
+        <!-- Play Area Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-5 flex-1 items-start">
+            
+            <!-- Left Side: Draggable Phrases -->
+            <div class="md:col-span-5 bg-white/70 backdrop-blur rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3 min-h-[300px]">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                    <h2 class="font-fredoka text-base text-slate-700 font-bold flex items-center gap-2">
+                        <span>📦</span> Containers & Partitives
+                    </h2>
+                    <span class="text-xs font-semibold text-slate-400">Drag or Tap</span>
+                </div>
+                
+                <div id="phrasesContainer" class="grid grid-cols-2 md:grid-cols-1 gap-3 flex-1 align-content-start">
+                    <!-- Draggable cards rendered via JS -->
+                </div>
+            </div>
+
+            <!-- Right Side: Item Drop Target Cards -->
+            <div class="md:col-span-7 bg-white/70 backdrop-blur rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3 min-h-[300px]">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                    <h2 class="font-fredoka text-base text-slate-700 font-bold flex items-center gap-2">
+                        <span>🍱</span> Food & Drink Items
+                    </h2>
+                    <span class="text-xs font-semibold text-slate-400">Drop Target</span>
+                </div>
+
+                <div id="targetsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+                    <!-- Target items rendered via JS -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Victory Modal -->
+    <div id="victoryModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 text-center shadow-2xl transform scale-90 transition-all duration-300 border-4 border-emerald-400 relative overflow-hidden" id="modalCard">
+            <!-- Top Deco -->
+            <div class="absolute -top-12 -right-12 w-32 h-32 bg-emerald-100 rounded-full blur-xl"></div>
+            <div class="absolute -bottom-12 -left-12 w-32 h-32 bg-blue-100 rounded-full blur-xl"></div>
+
+            <div class="relative z-10">
+                <div class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-3 shadow-inner">
+                    🏆
+                </div>
+
+                <h2 class="font-fredoka text-3xl font-bold text-slate-800 mb-1">Awesome Job!</h2>
+                <p class="text-slate-500 text-sm font-semibold mb-5">You matched all the containers correctly!</p>
+
+                <!-- Stars Rating -->
+                <div class="flex justify-center gap-2 text-3xl mb-6" id="starsContainer">
+                    <span>⭐</span><span>⭐</span><span>⭐</span>
+                </div>
+
+                <!-- Final Stats Grid -->
+                <div class="bg-slate-50 rounded-2xl p-4 grid grid-cols-3 gap-2 mb-6 border border-slate-100">
+                    <div>
+                        <div class="text-xs font-bold text-slate-400 uppercase">Score</div>
+                        <div id="finalScore" class="font-fredoka text-xl font-bold text-emerald-600">0</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-slate-400 uppercase">Accuracy</div>
+                        <div id="finalAccuracy" class="font-fredoka text-xl font-bold text-blue-600">100%</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-slate-400 uppercase">Time</div>
+                        <div id="finalTime" class="font-fredoka text-xl font-bold text-amber-600">0s</div>
+                    </div>
+                </div>
+
+                <button id="playAgainBtn" class="w-full py-3.5 px-6 bg-emerald-500 hover:bg-emerald-600 text-white font-fredoka text-lg font-bold rounded-2xl shadow-lg shadow-emerald-200 transition transform active:scale-95 flex items-center justify-center gap-2">
+                    <span>Play Again</span> 🔄
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* Web Audio Synthesizer for SFX without external dependencies */
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playPickup() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.08);
+
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+
+            playCorrect() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.06);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.2);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.06);
+                    osc.stop(now + idx * 0.06 + 0.2);
+                });
+            }
+
+            playWrong() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.linearRampToValueAtTime(110, now + 0.2);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playVictory() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const notes = [440, 554.37, 659.25, 880, 739.99, 880];
+                const durations = [0.12, 0.12, 0.12, 0.25, 0.12, 0.4];
+
+                let time = now;
+                notes.forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, time);
+
+                    gain.gain.setValueAtTime(0.25, time);
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + durations[i]);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(time);
+                    osc.stop(time + durations[i]);
+
+                    time += durations[i] + 0.02;
+                });
+            }
+        }
+
+        const soundFx = new SoundEffects();
+
+        const GAME_DATA = [
+            {
+                id: 'box',
+                phrase: 'a box of',
+                itemLabel: 'Cereal / Chocolates',
+                icon: '📦',
+                items: ['🥣 Cereal', '🍫 Chocolates'],
+                color: 'amber'
+            },
+            {
+                id: 'bowl',
+                phrase: 'a bowl of',
+                itemLabel: 'Soup / Rice',
+                icon: '🥣',
+                items: ['🍲 Soup', '🍚 Rice'],
+                color: 'emerald'
+            },
+            {
+                id: 'can',
+                phrase: 'a can of',
+                itemLabel: 'Soda / Tuna',
+                icon: '🥫',
+                items: ['🥤 Soda', '🐟 Tuna'],
+                color: 'rose'
+            },
+            {
+                id: 'slice',
+                phrase: 'a slice of',
+                itemLabel: 'Pizza / Cake',
+                icon: '🍕',
+                items: ['🍕 Pizza', '🍰 Cake'],
+                color: 'orange'
+            },
+            {
+                id: 'packet',
+                phrase: 'a packet of',
+                itemLabel: 'Crisps / Biscuits',
+                icon: '🍿',
+                items: ['🥔 Crisps', '🍪 Biscuits'],
+                color: 'purple'
+            },
+            {
+                id: 'bottle',
+                phrase: 'a bottle of',
+                itemLabel: 'Water / Olive Oil',
+                icon: '🍾',
+                items: ['💧 Water', '🫒 Olive Oil'],
+                color: 'blue'
+            },
+            {
+                id: 'cup',
+                phrase: 'a cup of',
+                itemLabel: 'Tea / Coffee',
+                icon: '☕',
+                items: ['☕ Coffee', '🍵 Tea'],
+                color: 'teal'
+            },
+            {
+                id: 'carton',
+                phrase: 'a carton of',
+                itemLabel: 'Milk / Juice',
+                icon: '🧃',
+                items: ['🥛 Milk', '🧃 Juice'],
+                color: 'sky'
+            }
+        ];
+
+        // Game State Variables
+        let state = {
+            mode: 'practice', // 'practice' or 'time'
+            score: 0,
+            attempts: 0,
+            matches: 0,
+            selectedPhraseId: null,
+            timer: 60,
+            timerInterval: null,
+            elapsedTime: 0,
+            gameActive: true,
+            draggedPhraseId: null,
+            matchedPairs: new Set()
+        };
+
+        // Utility: Fisher-Yates Shuffle
+        function shuffle(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // DOM Element Cache
+        const phrasesContainer = document.getElementById('phrasesContainer');
+        const targetsContainer = document.getElementById('targetsContainer');
+        const scoreText = document.getElementById('scoreText');
+        const attemptsText = document.getElementById('attemptsText');
+        const matchesText = document.getElementById('matchesText');
+        const progressBar = document.getElementById('progressBar');
+        const timerContainer = document.getElementById('timerContainer');
+        const timerText = document.getElementById('timerText');
+        const victoryModal = document.getElementById('victoryModal');
+        const modalCard = document.getElementById('modalCard');
+
+        function initGame() {
+            // Reset state
+            state.score = 0;
+            state.attempts = 0;
+            state.matches = 0;
+            state.selectedPhraseId = null;
+            state.draggedPhraseId = null;
+            state.matchedPairs.clear();
+            state.gameActive = true;
+            state.elapsedTime = 0;
+            
+            clearInterval(state.timerInterval);
+
+            if (state.mode === 'time') {
+                state.timer = 60;
+                timerContainer.classList.remove('hidden');
+                updateTimerDisplay();
+                startTimer();
+            } else {
+                timerContainer.classList.add('hidden');
+            }
+
+            updateScoreboard();
+            renderBoard();
+        }
+
+        function startTimer() {
+            state.timerInterval = setInterval(() => {
+                if (!state.gameActive) return;
+                state.timer--;
+                state.elapsedTime++;
+                updateTimerDisplay();
+
+                if (state.timer <= 0) {
+                    clearInterval(state.timerInterval);
+                    handleGameOver(false);
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(state.timer / 60);
+            const secs = state.timer % 60;
+            timerText.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            if (state.timer <= 10) {
+                timerContainer.classList.add('animate-pulse', 'bg-rose-100', 'text-rose-700', 'border-rose-300');
+            } else {
+                timerContainer.classList.remove('animate-pulse', 'bg-rose-100', 'text-rose-700', 'border-rose-300');
+            }
+        }
+
+        function updateScoreboard() {
+            scoreText.textContent = state.score;
+            attemptsText.textContent = state.attempts;
+            matchesText.textContent = `${state.matches} / ${GAME_DATA.length}`;
+            const pct = (state.matches / GAME_DATA.length) * 100;
+            progressBar.style.width = `${pct}%`;
+        }
+
+        function renderBoard() {
+            phrasesContainer.innerHTML = '';
+            targetsContainer.innerHTML = '';
+
+            const shuffledPhrases = shuffle(GAME_DATA);
+            const shuffledTargets = shuffle(GAME_DATA);
+
+            // Render Left Phrase Cards
+            shuffledPhrases.forEach(item => {
+                const isMatched = state.matchedPairs.has(item.id);
+                const card = document.createElement('div');
+                
+                card.id = `phrase-${item.id}`;
+                card.dataset.id = item.id;
+                
+                if (isMatched) {
+                    card.className = 'p-3 bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-between opacity-40 cursor-not-allowed select-none';
+                    card.innerHTML = `<span class="font-fredoka text-slate-500 font-semibold text-sm sm:text-base line-through">${item.phrase}</span> <span class="text-emerald-500 font-bold">✓</span>`;
+                } else {
+                    card.draggable = true;
+                    card.className = `draggable-card p-3.5 bg-white border-2 border-slate-200 hover:border-emerald-400 rounded-xl flex items-center justify-between shadow-sm hover:shadow transition-all duration-200 select-none ${state.selectedPhraseId === item.id ? 'ring-4 ring-emerald-300 border-emerald-500 bg-emerald-50' : ''}`;
+                    card.innerHTML = `
+                        <span class="font-fredoka text-slate-800 font-bold text-sm sm:text-base tracking-wide">${item.phrase}</span>
+                        <span class="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Drag / Tap</span>
+                    `;
+
+                    // Event Listeners for HTML5 Drag & Touch/Click fallback
+                    card.addEventListener('dragstart', handleDragStart);
+                    card.addEventListener('dragend', handleDragEnd);
+                    card.addEventListener('click', () => handlePhraseSelect(item.id));
+                }
+
+                phrasesContainer.appendChild(card);
+            });
+
+            // Render Right Target Slots
+            shuffledTargets.forEach(item => {
+                const isMatched = state.matchedPairs.has(item.id);
+                const target = document.createElement('div');
+                
+                target.id = `target-${item.id}`;
+                target.dataset.id = item.id;
+
+                if (isMatched) {
+                    target.className = 'drop-target p-3.5 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex items-center justify-between shadow-sm';
+                    target.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">${item.icon}</span>
+                            <div>
+                                <span class="font-fredoka text-emerald-800 font-bold text-sm sm:text-base block">${item.phrase}</span>
+                                <span class="text-xs text-emerald-600 font-semibold">${item.itemLabel}</span>
+                            </div>
+                        </div>
+                        <span class="w-7 h-7 bg-emerald-500 text-white rounded-full flex items-center justify-center font-bold text-sm">✓</span>
+                    `;
+                } else {
+                    target.className = 'drop-target p-3.5 bg-white border-2 border-slate-200 hover:border-blue-300 rounded-2xl flex items-center justify-between shadow-sm transition-all duration-200';
+                    target.innerHTML = `
+                        <div class="flex items-center gap-3 pointer-events-none">
+                            <span class="text-2xl sm:text-3xl">${item.icon}</span>
+                            <div>
+                                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">Item</div>
+                                <div class="font-fredoka text-slate-700 font-bold text-sm sm:text-base">${item.itemLabel}</div>
+                                <div class="text-xs text-slate-400 font-medium">${item.items.join(' • ')}</div>
+                            </div>
+                        </div>
+                        <div class="w-8 h-8 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-300 font-bold text-xs pointer-events-none">
+                            DROP
+                        </div>
+                    `;
+
+                    // Target Event Listeners
+                    target.addEventListener('dragover', handleDragOver);
+                    target.addEventListener('dragleave', handleDragLeave);
+                    target.addEventListener('drop', handleDrop);
+                    target.addEventListener('click', () => handleTargetClick(item.id));
+                }
+
+                targetsContainer.appendChild(target);
+            });
+        }
+
+        function handleDragStart(e) {
+            if (!state.gameActive) return;
+            soundFx.playPickup();
+            state.draggedPhraseId = this.dataset.id;
+            e.dataTransfer.setData('text/plain', this.dataset.id);
+            this.classList.add('opacity-50', 'scale-95');
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('opacity-50', 'scale-95');
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            if (!state.gameActive) return;
+            this.classList.add('drag-over', 'border-blue-500', 'bg-blue-50');
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over', 'border-blue-500', 'bg-blue-50');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over', 'border-blue-500', 'bg-blue-50');
+            if (!state.gameActive) return;
+
+            const droppedPhraseId = e.dataTransfer.getData('text/plain') || state.draggedPhraseId;
+            const targetId = this.dataset.id;
+
+            checkMatch(droppedPhraseId, targetId);
+        }
+
+        // Mobile/Tap Fallback Selection
+        function handlePhraseSelect(id) {
+            if (!state.gameActive || state.matchedPairs.has(id)) return;
+            
+            if (state.selectedPhraseId === id) {
+                state.selectedPhraseId = null; // deselect
+            } else {
+                soundFx.playPickup();
+                state.selectedPhraseId = id;
+            }
+            renderBoard();
+        }
+
+        function handleTargetClick(targetId) {
+            if (!state.gameActive || !state.selectedPhraseId || state.matchedPairs.has(targetId)) return;
+            
+            checkMatch(state.selectedPhraseId, targetId);
+            state.selectedPhraseId = null;
+        }
+
+        function checkMatch(phraseId, targetId) {
+            if (!phraseId || !targetId) return;
+
+            state.attempts++;
+
+            const targetElement = document.getElementById(`target-${targetId}`);
+            
+            if (phraseId === targetId) {
+                // Correct Match
+                soundFx.playCorrect();
+                state.matches++;
+                state.score += 100;
+                state.matchedPairs.add(phraseId);
+
+                if (targetElement) {
+                    targetElement.classList.add('animate-pop');
+                }
+
+                updateScoreboard();
+                renderBoard();
+
+                // Check Win
+                if (state.matches === GAME_DATA.length) {
+                    setTimeout(() => handleGameOver(true), 300);
+                }
+
+            } else {
+                // Wrong Match
+                soundFx.playWrong();
+                state.score = Math.max(0, state.score - 20);
+                updateScoreboard();
+
+                if (targetElement) {
+                    targetElement.classList.add('animate-shake', 'border-rose-400', 'bg-rose-50');
+                    setTimeout(() => {
+                        targetElement.classList.remove('animate-shake', 'border-rose-400', 'bg-rose-50');
+                    }, 500);
+                }
+            }
+        }
+
+        // Hint functionality
+        document.getElementById('hintBtn').addEventListener('click', () => {
+            if (!state.gameActive) return;
+
+            // Find unmatched phrases
+            const unmatched = GAME_DATA.filter(item => !state.matchedPairs.has(item.id));
+            if (unmatched.length === 0) return;
+
+            const randomPair = unmatched[Math.floor(Math.random() * unmatched.length)];
+            
+            // Deduct score for hint
+            state.score = Math.max(0, state.score - 10);
+            updateScoreboard();
+
+            // Highlight target & phrase temporarily
+            const phraseCard = document.getElementById(`phrase-${randomPair.id}`);
+            const targetCard = document.getElementById(`target-${randomPair.id}`);
+
+            if (phraseCard && targetCard) {
+                phraseCard.classList.add('ring-4', 'ring-amber-400', 'bg-amber-50');
+                targetCard.classList.add('ring-4', 'ring-amber-400', 'bg-amber-50');
+
+                setTimeout(() => {
+                    phraseCard.classList.remove('ring-4', 'ring-amber-400', 'bg-amber-50');
+                    targetCard.classList.remove('ring-4', 'ring-amber-400', 'bg-amber-50');
+                }, 1200);
+            }
+        });
+
+        function handleGameOver(isWin) {
+            state.gameActive = false;
+            clearInterval(state.timerInterval);
+
+            if (isWin) {
+                soundFx.playVictory();
+                
+                // Trigger confetti
+                if (typeof confetti === 'function') {
+                    confetti({
+                        particleCount: 100,
+                        spread: 70,
+                        origin: { y: 0.6 }
+                    });
+                }
+
+                // Accuracy calculation
+                const accuracy = Math.round((GAME_DATA.length / Math.max(state.attempts, GAME_DATA.length)) * 100);
+                
+                document.getElementById('finalScore').textContent = state.score;
+                document.getElementById('finalAccuracy').textContent = `${accuracy}%`;
+                document.getElementById('finalTime').textContent = state.mode === 'time' ? `${60 - state.timer}s` : `${state.elapsedTime}s`;
+
+                // Calculate Star Rating
+                const starsContainer = document.getElementById('starsContainer');
+                if (accuracy >= 85) {
+                    starsContainer.innerHTML = '⭐ ⭐ ⭐';
+                } else if (accuracy >= 60) {
+                    starsContainer.innerHTML = '⭐ ⭐ ⚪';
+                } else {
+                    starsContainer.innerHTML = '⭐ ⚪ ⚪';
+                }
+
+                // Show Modal
+                victoryModal.classList.remove('opacity-0', 'pointer-events-none');
+                modalCard.classList.remove('scale-90');
+                modalCard.classList.add('scale-100');
+            } else {
+                // Time Up / Game Over
+                alert("⏳ Time's up! Try again in Time Attack or switch to Practice mode.");
+                initGame();
+            }
+        }
+
+        // Mode Switching
+        const modePracticeBtn = document.getElementById('modePracticeBtn');
+        const modeTimeBtn = document.getElementById('modeTimeBtn');
+
+        modePracticeBtn.addEventListener('click', () => {
+            if (state.mode === 'practice') return;
+            state.mode = 'practice';
+            modePracticeBtn.className = 'px-3 py-1.5 rounded-lg transition-all bg-white text-emerald-700 shadow-sm font-bold';
+            modeTimeBtn.className = 'px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 font-normal';
+            initGame();
+        });
+
+        modeTimeBtn.addEventListener('click', () => {
+            if (state.mode === 'time') return;
+            state.mode = 'time';
+            modeTimeBtn.className = 'px-3 py-1.5 rounded-lg transition-all bg-white text-emerald-700 shadow-sm font-bold';
+            modePracticeBtn.className = 'px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 font-normal';
+            initGame();
+        });
+
+        // Restart and Play Again Listeners
+        document.getElementById('restartBtn').addEventListener('click', initGame);
+        document.getElementById('playAgainBtn').addEventListener('click', () => {
+            victoryModal.classList.add('opacity-0', 'pointer-events-none');
+            initGame();
+        });
+
+        // Mute / Unmute Toggle
+        const soundBtn = document.getElementById('soundBtn');
+        const soundOnIcon = document.getElementById('soundOnIcon');
+        const soundOffIcon = document.getElementById('soundOffIcon');
+
+        soundBtn.addEventListener('click', () => {
+            soundFx.muted = !soundFx.muted;
+            if (soundFx.muted) {
+                soundOnIcon.classList.add('hidden');
+                soundOffIcon.classList.remove('hidden');
+            } else {
+                soundOnIcon.classList.remove('hidden');
+                soundOffIcon.classList.add('hidden');
+                soundFx.playPickup();
+            }
+        });
+
+        window.onload = function() {
+            initGame();
+        };
+    </script>
+</body>
+</html>
